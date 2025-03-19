@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+streamlit
+requests
+faiss-cpu
+sentence-transformers
+nltk
+PyMuPDF
+python-docx
