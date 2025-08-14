@@ -1,8 +1,9 @@
 import os
-import fitz  # PyMuPDF for PDFs
+import fitz 
 import faiss
 import numpy as np
 import nltk
+import asyncio
 from nltk.tokenize import sent_tokenize
 from fastapi import FastAPI, File, UploadFile
 from sentence_transformers import SentenceTransformer, CrossEncoder
@@ -10,8 +11,6 @@ from sentence_transformers import SentenceTransformer, CrossEncoder
 # Download NLTK tokenizer
 nltk.download('punkt')
 nltk.data.path.append("/Users/stutipandey/nltk_data")
-nltk.download('punkt')
-
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -42,28 +41,53 @@ def extract_text(file_path):
 
 @app.post("/upload/")
 async def upload_file(file: UploadFile):
-    file_path = f"uploads/{file.filename}"
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
+    """
+    Uploads a PDF, saves it to disk, extracts its text, splits into chunks,
+    creates embeddings, and stores them in the FAISS index.
+    """
+    # 1️⃣ Make uploads folder
+    os.makedirs("uploads", exist_ok=True)
+    file_path = os.path.join("uploads", file.filename)
 
-    text = extract_text(file_path)
+    # 2️⃣ Save uploaded file synchronously
+    try:
+        with open(file_path, "wb") as buffer:
+            buffer.write(await file.read())
+    except Exception as e:
+        return {"error": f"Failed to save file: {str(e)}"}
 
-    # Debugging print
-    print(f"✅ Extracted {len(text)} characters from {file.filename}")
+    # 3️⃣ Confirm file exists before processing
+    if not os.path.isfile(file_path):
+        return {"error": f"File {file_path} was not saved correctly."}
 
-    # Split into meaningful chunks
+    # 4️⃣ Extract PDF text off the main thread
+    try:
+        text = await asyncio.to_thread(extract_text, file_path)
+    except Exception as e:
+        return {"error": f"Failed to extract text: {str(e)}"}
+
+    # 5️⃣ Tokenize & chunk text
     sentences = sent_tokenize(text)
-    chunk_size = 5  
-    chunks = [" ".join(sentences[i:i+chunk_size]) for i in range(0, len(sentences), chunk_size)]
+    chunk_size = 5  # adjust for context length
+    chunks = [
+        " ".join(sentences[i:i + chunk_size]) 
+        for i in range(0, len(sentences), chunk_size)
+    ]
 
-    for chunk in chunks:
-        emb = get_embedding(chunk)
-        index.add(np.array([emb]))  # Add to FAISS index
-        documents.append(chunk)
+    # 6️⃣ Create embeddings & add to FAISS index
+    try:
+        for chunk in chunks:
+            emb = get_embedding(chunk)  # returns np.float32
+            index.add(np.array([emb], dtype=np.float32))
+            documents.append(chunk)
+    except Exception as e:
+        return {"error": f"Failed during embedding/indexing: {str(e)}"}
 
-    print(f"✅ Stored {len(chunks)} document chunks in FAISS index.")
-
-    return {"filename": file.filename, "message": "Document processed successfully!"}
+    return {
+        "filename": file.filename,
+        "chunks_added": len(chunks),
+        "message": "Document processed successfully!"
+    }
 
 # Process an existing document
 @app.post("/process_existing/")
@@ -90,7 +114,6 @@ async def process_existing_file(filename: str):
 
     return {"filename": filename, "message": "Existing document processed with improved chunking!"}
 
-
 # Ask a question
 @app.get("/ask/")
 async def ask_question(query: str):
@@ -111,7 +134,6 @@ async def ask_question(query: str):
     best_match = documents[I[0][0]]
     
     return {"query": query, "answer": best_match}
-
 
 # Test embedding functionality
 test_text = "Hello, test embedding!"
