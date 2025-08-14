@@ -28,7 +28,7 @@ A **FastAPI-powered** Document Q&A system that utilizes **FAISS** for efficient 
 ```
 document-qa/ 
 │── uploads/ # Folder to store uploaded PDFs
-│── venv/ # Virtual environment (not tracked)
+│── .venv/ # Virtual environment (not tracked)
 │── main.py # FastAPI Backend
 │── app.py # Streamlit Frontend
 │── requirements.txt # Dependencies
@@ -48,9 +48,9 @@ cd Document-QA
 
 ### 2️⃣ Create a Virtual Environment
 ```bash
-python3 -m venv venv
-source venv/bin/activate   # macOS/Linux  
-venv\Scripts\activate      # Windows
+python3 -m venv .venv
+source .venv/bin/activate   # macOS/Linux  
+.venv\Scripts\activate      # Windows
 ```
 
 ### 3️⃣ Install Dependencies
